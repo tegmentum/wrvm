@@ -1,0 +1,10 @@
+{
+  "name": "wrvm",
+  "description": "Use wrvm, the WAMR Version Manager, to install, pin, switch, run, and manage versioned WAMR (WebAssembly Micro Runtime) runtimes.",
+  "version": "0.1.0",
+  "author": { "name": "Tegmentum" },
+  "homepage": "https://github.com/tegmentum/wrvm",
+  "repository": "https://github.com/tegmentum/wrvm",
+  "license": "Apache-2.0",
+  "keywords": ["wasm", "webassembly", "wamr", "iwasm", "version-manager", "runtime"]
+}

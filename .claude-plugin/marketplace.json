@@ -1,0 +1,11 @@
+{
+  "name": "tegmentum",
+  "owner": { "name": "Tegmentum" },
+  "plugins": [
+    {
+      "name": "wrvm",
+      "source": "./plugins/wrvm",
+      "description": "Use wrvm to install, pin, switch, run, and manage versioned WAMR (WebAssembly Micro Runtime) runtimes."
+    }
+  ]
+}

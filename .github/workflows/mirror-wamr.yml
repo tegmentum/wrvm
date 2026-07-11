@@ -1,0 +1,219 @@
+name: mirror-wamr
+
+# Build aarch64 WAMR runtime binaries from upstream source and publish them as a
+# side-channel release on this repo, so wrvm can install WAMR on ARM hosts
+# until upstream (bytecodealliance/wasm-micro-runtime) publishes aarch64
+# assets.
+#
+# Trigger: manual (workflow_dispatch). WAMR cuts a release roughly every
+# 6–12 months, so a scheduled trigger would be overkill; whoever bumps the
+# mirror runs this by hand with the upstream tag as input.
+#
+# Publishes under the tag `wamr-mirror-<version>` (distinct from wrvm's own
+# `v*` tags) so wrvm's install path can find it deterministically.
+#
+# Variants produced (aarch64-linux + aarch64-macos):
+#   • iwasm            — plain interpreter/JIT runtime
+#   • iwasm-gc-eh      — runtime with GC + Exception Handling proposals
+#   • wamrc            — AOT compiler (needs LLVM; cached across runs)
+#   • wasi-extensions  — headers + libs for embedding (libiwasm et al.)
+
+on:
+  workflow_dispatch:
+    inputs:
+      wamr_version:
+        description: 'Upstream WAMR version (e.g. 2.4.5)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  WAMR_REPO: bytecodealliance/wasm-micro-runtime
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04-arm
+            os_token: aarch64-ubuntu-24.04
+            posix_dir: linux
+            cores: nproc
+          - runner: macos-14
+            os_token: aarch64-macos-14
+            posix_dir: darwin
+            cores: sysctl -n hw.ncpu
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: fetch WAMR source
+        run: |
+          git clone --depth 1 --branch WAMR-${{ inputs.wamr_version }} \
+            https://github.com/${{ env.WAMR_REPO }}.git wamr
+
+      # ------------------------------------------------------------------
+      # iwasm (plain)
+      # ------------------------------------------------------------------
+      - name: build iwasm (plain)
+        working-directory: wamr/product-mini/platforms/${{ matrix.posix_dir }}
+        run: |
+          mkdir build && cd build
+          cmake ..
+          cmake --build . -j $(${{ matrix.cores }})
+          test -x iwasm
+
+      - name: package iwasm (plain)
+        run: |
+          ver=${{ inputs.wamr_version }}
+          name=iwasm-${ver}-${{ matrix.os_token }}
+          mkdir -p out/${name}
+          cp wamr/product-mini/platforms/${{ matrix.posix_dir }}/build/iwasm out/${name}/iwasm
+          cp wamr/LICENSE out/${name}/LICENSE || true
+          tar -C out -czf ${name}.tar.gz ${name}
+          rm -rf out
+
+      # ------------------------------------------------------------------
+      # iwasm-gc-eh
+      # ------------------------------------------------------------------
+      - name: build iwasm-gc-eh
+        working-directory: wamr/product-mini/platforms/${{ matrix.posix_dir }}
+        run: |
+          rm -rf build
+          mkdir build && cd build
+          cmake -DWAMR_BUILD_GC=1 -DWAMR_BUILD_EXCE_HANDLING=1 ..
+          cmake --build . -j $(${{ matrix.cores }})
+          test -x iwasm
+
+      - name: package iwasm-gc-eh
+        run: |
+          ver=${{ inputs.wamr_version }}
+          name=iwasm-gc-eh-${ver}-${{ matrix.os_token }}
+          mkdir -p out/${name}
+          cp wamr/product-mini/platforms/${{ matrix.posix_dir }}/build/iwasm out/${name}/iwasm
+          cp wamr/LICENSE out/${name}/LICENSE || true
+          tar -C out -czf ${name}.tar.gz ${name}
+          rm -rf out
+
+      # ------------------------------------------------------------------
+      # wamrc (AOT compiler)
+      #
+      # wamrc links against LLVM. WAMR ships `wamr-compiler/build_llvm.sh`
+      # which clones LLVM into `core/deps/llvm` and builds it — expensive on
+      # first run (~30 min), so we cache the built tree keyed on the WAMR
+      # version + the build script's contents.
+      # ------------------------------------------------------------------
+      - name: hash LLVM build script
+        id: llvm_key
+        working-directory: wamr
+        run: |
+          if command -v sha256sum >/dev/null; then
+            h=$(sha256sum wamr-compiler/build_llvm.sh | awk '{print $1}')
+          else
+            h=$(shasum -a 256 wamr-compiler/build_llvm.sh | awk '{print $1}')
+          fi
+          echo "hash=$h" >> "$GITHUB_OUTPUT"
+
+      - name: cache LLVM
+        id: llvm_cache
+        uses: actions/cache@v4
+        with:
+          path: wamr/core/deps/llvm
+          key: llvm-${{ matrix.os_token }}-wamr-${{ inputs.wamr_version }}-${{ steps.llvm_key.outputs.hash }}
+
+      - name: build LLVM (if not cached)
+        if: steps.llvm_cache.outputs.cache-hit != 'true'
+        working-directory: wamr/wamr-compiler
+        run: |
+          ./build_llvm.sh
+
+      - name: build wamrc
+        working-directory: wamr/wamr-compiler
+        run: |
+          mkdir -p build && cd build
+          cmake ..
+          cmake --build . -j $(${{ matrix.cores }})
+          test -x wamrc
+
+      - name: package wamrc
+        run: |
+          ver=${{ inputs.wamr_version }}
+          name=wamrc-${ver}-${{ matrix.os_token }}
+          mkdir -p out/${name}
+          cp wamr/wamr-compiler/build/wamrc out/${name}/wamrc
+          cp wamr/LICENSE out/${name}/LICENSE || true
+          tar -C out -czf ${name}.tar.gz ${name}
+          rm -rf out
+
+      # ------------------------------------------------------------------
+      # wasi-extensions (headers + libs for embedding libiwasm)
+      #
+      # Package the `wamr-wasi-extensions/` install tree as tar.gz. Upstream
+      # ships this as `wamr-wasi-extensions-<ver>.zip`; our aarch64 mirror
+      # uses the same `wasi-extensions-<ver>-<runner>.tar.gz` shape as the
+      # other variants so wrvm's asset matcher covers it uniformly.
+      # ------------------------------------------------------------------
+      - name: build wasi-extensions
+        working-directory: wamr/wamr-wasi-extensions
+        run: |
+          mkdir -p build && cd build
+          cmake -DCMAKE_INSTALL_PREFIX=../install ..
+          cmake --build . -j $(${{ matrix.cores }})
+          cmake --install .
+
+      - name: package wasi-extensions
+        run: |
+          ver=${{ inputs.wamr_version }}
+          name=wasi-extensions-${ver}-${{ matrix.os_token }}
+          mkdir -p out/${name}
+          cp -R wamr/wamr-wasi-extensions/install/. out/${name}/
+          cp wamr/LICENSE out/${name}/LICENSE || true
+          tar -C out -czf ${name}.tar.gz ${name}
+          rm -rf out
+
+      # ------------------------------------------------------------------
+      # Checksums + upload
+      # ------------------------------------------------------------------
+      - name: checksums
+        run: |
+          for f in *.tar.gz; do
+            if command -v sha256sum >/dev/null; then
+              sha256sum "$f" > "$f.sha256"
+            else
+              shasum -a 256 "$f" > "$f.sha256"
+            fi
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wamr-mirror-${{ matrix.os_token }}
+          path: |
+            *.tar.gz
+            *.tar.gz.sha256
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: publish mirror release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: wamr-mirror-${{ inputs.wamr_version }}
+          name: WAMR ${{ inputs.wamr_version }} — aarch64 mirror
+          body: |
+            aarch64 builds of WAMR ${{ inputs.wamr_version }}, mirrored from
+            upstream source at tag `WAMR-${{ inputs.wamr_version }}` because
+            upstream publishes x86_64 assets only.
+
+            Built variants: `iwasm` (plain), `iwasm-gc-eh` (GC + Exception
+            Handling), `wamrc` (AOT compiler), `wasi-extensions` (headers +
+            libs for embedding).
+
+            wrvm resolves these automatically on aarch64 hosts; each asset
+            ships with a `.sha256` sidecar that wrvm verifies on install.
+          files: dist/*

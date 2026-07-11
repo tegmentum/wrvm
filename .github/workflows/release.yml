@@ -1,0 +1,64 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+            asset: wrvm-x86_64-linux
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-24.04-arm
+            asset: wrvm-aarch64-linux
+          - target: x86_64-apple-darwin
+            runner: macos-13
+            asset: wrvm-x86_64-macos
+          - target: aarch64-apple-darwin
+            runner: macos-14
+            asset: wrvm-aarch64-macos
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: build
+        run: cargo build --release --target ${{ matrix.target }}
+      - name: package
+        shell: bash
+        run: |
+          cp target/${{ matrix.target }}/release/wrvm ${{ matrix.asset }}
+          if command -v sha256sum >/dev/null; then
+            sha256sum ${{ matrix.asset }} > ${{ matrix.asset }}.sha256
+          else
+            shasum -a 256 ${{ matrix.asset }} > ${{ matrix.asset }}.sha256
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: |
+            ${{ matrix.asset }}
+            ${{ matrix.asset }}.sha256
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

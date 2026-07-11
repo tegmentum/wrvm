@@ -1,0 +1,1 @@
+../../../plugins/wrvm/skills/wrvm/SKILL.md
