@@ -67,3 +67,56 @@ jobs:
         with:
           files: dist/*
           generate_release_notes: true
+
+  # After the release exists, download the four `.sha256` sidecars, patch
+  # `Formula/wrvm.rb` with the new version + real hashes, and commit the
+  # result to `main`. Uses the default `GITHUB_TOKEN` (workflow-level
+  # `contents: write` above). `[skip ci]` keeps this docs-only patch from
+  # re-triggering CI.
+  update-formula:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          # Default `persist-credentials: true` keeps the token wired up for
+          # the follow-up `git push`.
+      - name: fetch sha256 sidecars
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p sha
+          for asset in wrvm-x86_64-linux wrvm-aarch64-linux wrvm-x86_64-macos wrvm-aarch64-macos; do
+            gh release download "$GITHUB_REF_NAME" \
+              --repo "$GITHUB_REPOSITORY" \
+              --pattern "${asset}.sha256" \
+              --dir sha
+          done
+      - name: patch Formula
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          # Bump the version literal.
+          sed -i "s|^  version \".*\"|  version \"${VERSION}\"|" Formula/wrvm.rb
+          # For each asset, replace the sha256 line that follows the matching
+          # url line. Each asset name appears only in its url line, so
+          # `\|asset|{n;s|...|...|;}` unambiguously targets the next sha256.
+          for asset in wrvm-x86_64-linux wrvm-aarch64-linux wrvm-x86_64-macos wrvm-aarch64-macos; do
+            HASH="$(awk '{print $1}' "sha/${asset}.sha256")"
+            sed -i "\|${asset}|{n;s|sha256 \"[^\"]*\"|sha256 \"${HASH}\"|;}" Formula/wrvm.rb
+          done
+          rm -rf sha
+      - name: commit + push
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet Formula/wrvm.rb; then
+            echo "Formula already up to date for ${GITHUB_REF_NAME}; nothing to commit."
+            exit 0
+          fi
+          git add Formula/wrvm.rb
+          git commit -m "chore: fill SHA256 values in Formula for ${GITHUB_REF_NAME} assets [skip ci]"
+          git push origin HEAD:main
