@@ -13,17 +13,17 @@ class Wrvm < Formula
       odie "wrvm v#{version} has no prebuilt Intel macOS binary yet — build from source with `cargo build --release`, or install via `curl | sh` which falls back to `cargo build`."
     else
       url "https://github.com/tegmentum/wrvm/releases/download/v#{version}/wrvm-aarch64-macos"
-      sha256 "FILL_IN_SHA256_MACOS_AARCH64"
+      sha256 "f530c9093a30fab2e1571a534c1c8dbdafa3622bb1289cab6ba37d685f117d3f"
     end
   end
 
   on_linux do
     if Hardware::CPU.intel?
       url "https://github.com/tegmentum/wrvm/releases/download/v#{version}/wrvm-x86_64-linux"
-      sha256 "FILL_IN_SHA256_LINUX_X86_64"
+      sha256 "1ebf02c881544c1207b46ce3856317132a3e5fa18d2ff8eb60eb53181c5bf4b9"
     else
       url "https://github.com/tegmentum/wrvm/releases/download/v#{version}/wrvm-aarch64-linux"
-      sha256 "FILL_IN_SHA256_LINUX_AARCH64"
+      sha256 "40b4392657bdeea834325a822f5b6d1e3d32e074101fc90cef485f81c58c1827"
     end
   end
 
