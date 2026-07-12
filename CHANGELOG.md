@@ -20,9 +20,10 @@
   in-repo mirror release (tag `wamr-mirror-<ver>`) built from upstream source
   by the `mirror-wamr` GitHub Actions workflow. On aarch64 hosts, `install`
   transparently resolves runtime downloads from that mirror.
-- Mirrored variants (all four): `iwasm`, `iwasm-gc-eh`, `wamrc`,
-  `wasi-extensions`. The workflow caches LLVM across runs so the wamrc build
-  amortizes across versions.
+- Mirrored variants (three of four): `iwasm`, `iwasm-gc-eh`, `wamrc`. The
+  workflow caches LLVM across runs so the wamrc build amortizes across
+  versions. `wasi-extensions` needs a wasi-sdk toolchain (its cmake sources
+  include `<wasi/api.h>` from wasi-libc); tracked as follow-up.
 - Install verifies each mirror asset against its `.sha256` sidecar (and
   honors an upstream `digest` field when present).
 - `WRVM_RUNTIME_MIRROR=owner/repo` overrides the mirror source.

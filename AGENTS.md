@@ -65,9 +65,10 @@ registrations and `usage.log` (JSONL) holds observed usage.
 
 - **No ARM64 releases upstream.** WAMR ships x86_64 assets only. wrvm bridges
   this by publishing an aarch64 **mirror channel** in this repo — the
-  `mirror-wamr` GitHub Actions workflow builds all four variants (`iwasm`,
-  `iwasm-gc-eh`, `wamrc`, `wasi-extensions`) from upstream source and uploads
-  them under a `wamr-mirror-<ver>` release tag with `.sha256` sidecars. On
+  `mirror-wamr` GitHub Actions workflow builds three variants (`iwasm`,
+  `iwasm-gc-eh`, `wamrc`) from upstream source and uploads them under a
+  `wamr-mirror-<ver>` release tag with `.sha256` sidecars. `wasi-extensions`
+  needs a wasi-sdk toolchain and is tracked as follow-up work. On
   aarch64 hosts `install` resolves the mirror automatically. Override the
   source repo with `WRVM_RUNTIME_MIRROR=owner/repo`. The `wamrc` build caches
   LLVM (via `actions/cache`, keyed on WAMR version + build-script hash) so

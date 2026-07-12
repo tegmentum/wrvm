@@ -93,9 +93,12 @@ changes across releases.
   upstream source at the matching `WAMR-<ver>` tag. `platform.rs` sets
   `needs_mirror = true` on ARM; `install.rs` prefers the upstream asset and
   falls back to the mirror release. `WRVM_RUNTIME_MIRROR=owner/repo`
-  overrides the source repo. All four variants are mirrored (`iwasm`,
-  `iwasm-gc-eh`, `wamrc`, `wasi-extensions`); the wamrc job caches LLVM via
-  `actions/cache` keyed on WAMR version + `build_llvm.sh` hash.
+  overrides the source repo. Three of four variants are mirrored (`iwasm`,
+  `iwasm-gc-eh`, `wamrc`); the wamrc job caches LLVM via `actions/cache`
+  keyed on WAMR version + `build_llvm.sh` hash. `wasi-extensions` isn't
+  mirrored yet — its cmake target compiles C sources that include
+  `<wasi/api.h>` from wasi-libc, which requires a wasi-sdk toolchain rather
+  than the native host compiler.
 - **Checksums.** `install::expected_sha256` prefers the release JSON's
   `digest` field, then falls back to a sibling `<name>.sha256` asset in the
   same release. Mirror releases always publish sidecars; upstream may not.

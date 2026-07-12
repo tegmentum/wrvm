@@ -147,10 +147,11 @@ compiled from upstream source at the matching `WAMR-<version>` tag. Building
 and publishing that release is driven by the `mirror-wamr` GitHub Actions
 workflow, triggered manually with the upstream version as input.
 
-The workflow builds all four variants (`iwasm`, `iwasm-gc-eh`, `wamrc`,
-`wasi-extensions`) with `.sha256` sidecars that wrvm verifies on install.
-The `wamrc` build caches LLVM across runs, so the ~30-minute LLVM step lands
-only on the first version bump. The mirror is opt-in per version: if
+The workflow builds three of four variants (`iwasm`, `iwasm-gc-eh`, `wamrc`)
+with `.sha256` sidecars that wrvm verifies on install. `wasi-extensions`
+needs a wasi-sdk toolchain and is not mirrored yet — install it on x86_64 or
+build from source until it is. The `wamrc` build caches LLVM across runs,
+so the ~30-minute LLVM step lands only on the first version bump. The mirror is opt-in per version: if
 `wamr-mirror-<version>` does not exist yet, `wrvm install <version>` on
 aarch64 prints a clear error pointing at the workflow.
 `WRVM_RUNTIME_MIRROR=owner/repo` overrides the source repo.
