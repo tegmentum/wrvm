@@ -1,0 +1,76 @@
+name: mirror-wamr-sync
+
+# Scheduler: keep the in-repo aarch64 mirror channel caught up with upstream
+# WAMR releases without manual dispatch. Runs twice a week — WAMR cuts real
+# releases roughly every 6–12 months, so this is plenty. Also allow
+# workflow_dispatch for "sync now".
+#
+# For each upstream `WAMR-<ver>` release that lacks a matching
+# `wamr-mirror-<ver>` release on this repo, dispatch `mirror-wamr.yml` with
+# that version as input. Rate-limited to 3 dispatches per run (oldest
+# un-mirrored version first, so historical fill-in beats jumping ahead) to
+# avoid runner starvation if upstream cuts several releases at once.
+
+on:
+  schedule:
+    # Mon + Thu at 06:00 UTC.
+    - cron: '0 6 * * 1,4'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write   # required to call `gh workflow run mirror-wamr.yml`
+
+env:
+  UPSTREAM_REPO: bytecodealliance/wasm-micro-runtime
+  MAX_DISPATCHES: 3
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: dispatch mirror-wamr for missing versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          # Real releases only: tag starts with `WAMR-`, not draft, not
+          # prerelease. Extract the bare version (e.g. `2.4.5`), sort
+          # ascending so we fill oldest first.
+          mapfile -t upstream < <(
+            gh release list \
+              --repo "$UPSTREAM_REPO" \
+              --limit 60 \
+              --json tagName,isDraft,isPrerelease \
+              --jq '.[] | select(.isDraft == false and .isPrerelease == false and (.tagName | startswith("WAMR-"))) | .tagName' \
+              | sed 's/^WAMR-//' \
+              | sort -V
+          )
+          if [ ${#upstream[@]} -eq 0 ]; then
+            echo "no upstream WAMR releases found (unexpected); nothing to do"
+            exit 0
+          fi
+
+          dispatched=0
+          skipped=0
+          for ver in "${upstream[@]}"; do
+            if [ "$dispatched" -ge "$MAX_DISPATCHES" ]; then
+              echo "Reached MAX_DISPATCHES ($MAX_DISPATCHES); stopping."
+              break
+            fi
+            if gh release view "wamr-mirror-${ver}" \
+                --repo "$GITHUB_REPOSITORY" \
+                >/dev/null 2>&1; then
+              skipped=$((skipped + 1))
+              continue
+            fi
+            echo "Dispatching mirror-wamr for ${ver} ..."
+            gh workflow run mirror-wamr.yml \
+              --repo "$GITHUB_REPOSITORY" \
+              -f wamr_version="${ver}"
+            dispatched=$((dispatched + 1))
+          done
+
+          echo
+          echo "Summary: dispatched=${dispatched}, already-mirrored=${skipped}, total-upstream=${#upstream[@]}"
