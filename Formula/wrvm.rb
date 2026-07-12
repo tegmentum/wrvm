@@ -8,20 +8,20 @@ class Wrvm < Formula
   on_macos do
     if Hardware::CPU.intel?
       url "https://github.com/tegmentum/wrvm/releases/download/v#{version}/wrvm-x86_64-macos"
-      sha256 "FILL_IN_SHA256_MACOS_X86_64"
+      sha256 "ae3cc128d847827a4dc6686023d14905c0b734492fddb028d8da659069eeca08"
     else
       url "https://github.com/tegmentum/wrvm/releases/download/v#{version}/wrvm-aarch64-macos"
-      sha256 "FILL_IN_SHA256_MACOS_AARCH64"
+      sha256 "63976ec763a6c8c0404e5a10934585a579d9a585ef74178c38de4fa8a480c21a"
     end
   end
 
   on_linux do
     if Hardware::CPU.intel?
       url "https://github.com/tegmentum/wrvm/releases/download/v#{version}/wrvm-x86_64-linux"
-      sha256 "FILL_IN_SHA256_LINUX_X86_64"
+      sha256 "c5e86f0a3eaf67ee4dec9a6a0191db32488e153717d2646c01e4bc5b22491296"
     else
       url "https://github.com/tegmentum/wrvm/releases/download/v#{version}/wrvm-aarch64-linux"
-      sha256 "FILL_IN_SHA256_LINUX_AARCH64"
+      sha256 "c14be1c52da1beee853b9504ebd8e7372840bd9b13d3b20b90c49e3ba74e1bd3"
     end
   end
 
