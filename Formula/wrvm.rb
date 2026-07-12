@@ -1,27 +1,27 @@
 class Wrvm < Formula
   desc "wrvm — WAMR (WebAssembly Micro Runtime) version manager"
   homepage "https://github.com/tegmentum/wrvm"
-  version "0.1.0"
+  version "0.1.1"
   license "Apache-2.0"
 
   # Fill in per-platform sha256 values from the published release assets.
   on_macos do
     if Hardware::CPU.intel?
       url "https://github.com/tegmentum/wrvm/releases/download/v#{version}/wrvm-x86_64-macos"
-      sha256 "FILL_IN_SHA256_MACOS_X86_64"
+      sha256 "1dafacf5c256260c5a20e0eb83856f628e82a48148b84a03a0e184da7212a4af"
     else
       url "https://github.com/tegmentum/wrvm/releases/download/v#{version}/wrvm-aarch64-macos"
-      sha256 "FILL_IN_SHA256_MACOS_AARCH64"
+      sha256 "a3dd52aaf8083888b8e62cef359237b411eb4fd323b061b949ee92cf195eb051"
     end
   end
 
   on_linux do
     if Hardware::CPU.intel?
       url "https://github.com/tegmentum/wrvm/releases/download/v#{version}/wrvm-x86_64-linux"
-      sha256 "1ebf02c881544c1207b46ce3856317132a3e5fa18d2ff8eb60eb53181c5bf4b9"
+      sha256 "fbf89a41272405bbab25a3121947816783afb81e0567d212156b0afd299d079d"
     else
       url "https://github.com/tegmentum/wrvm/releases/download/v#{version}/wrvm-aarch64-linux"
-      sha256 "40b4392657bdeea834325a822f5b6d1e3d32e074101fc90cef485f81c58c1827"
+      sha256 "405a18a9e658db8356c97ea7b3f084faea0349fe5f1b4eb50b268fd04f5ae0b2"
     end
   end
 
