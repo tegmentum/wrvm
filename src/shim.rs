@@ -212,6 +212,7 @@ pub fn exec_or_run(mut cmd: Command, bin: &Path) -> Result<()> {
 
 #[cfg(not(unix))]
 pub fn exec_or_run(mut cmd: Command, bin: &Path) -> Result<()> {
+    use anyhow::Context;
     let status = cmd
         .status()
         .with_context(|| format!("running {}", bin.display()))?;
