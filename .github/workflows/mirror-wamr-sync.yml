@@ -36,8 +36,13 @@ jobs:
           set -euo pipefail
 
           # Real releases only: tag starts with `WAMR-`, not draft, not
-          # prerelease. Extract the bare version (e.g. `2.4.5`), sort
-          # ascending so we fill oldest first.
+          # prerelease, AND the version portion parses as an exact
+          # `MAJOR.MINOR.PATCH` triple. Upstream carries old date-shaped
+          # tags (`WAMR-01-18-2022`, `WAMR-fast-jit-06-29-2022`) that
+          # slipped through a startsWith check the first time we ran this
+          # — filter them out here so the scheduler doesn't dispatch
+          # mirror builds against nonexistent `WAMR-01-18-2022` refs.
+          # Sort ascending so we fill oldest first.
           mapfile -t upstream < <(
             gh release list \
               --repo "$UPSTREAM_REPO" \
@@ -45,6 +50,7 @@ jobs:
               --json tagName,isDraft,isPrerelease \
               --jq '.[] | select(.isDraft == false and .isPrerelease == false and (.tagName | startswith("WAMR-"))) | .tagName' \
               | sed 's/^WAMR-//' \
+              | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
               | sort -V
           )
           if [ ${#upstream[@]} -eq 0 ]; then
