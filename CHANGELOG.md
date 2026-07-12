@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.1.3 — 2026-07-12
+
+### Fixed
+- `wrvm doctor` no longer reports "hook not found" when the rc uses the
+  `eval "$(wrvm shell-init)"` line that `wrvm setup` writes. It now
+  accepts the shims dir, `wrvm shell-init`, or `# wrvm-managed:env` as
+  evidence that shell integration is wired.
+- `wrvm doctor` no longer lists the brew-linked `wrvm` binary as an
+  external `iwasm` — canonicalizing the `iwasm` shim can resolve outside
+  `WRVM_HOME` (e.g. into `/opt/homebrew/bin/`) even though the target
+  identifies as wrvm. `detect_external` now skips binaries whose
+  `--version` starts with `wrvm `.
+
 ## 0.1.2 — 2026-07-12
 
 ### Added

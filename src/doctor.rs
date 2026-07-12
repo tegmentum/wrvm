@@ -163,6 +163,15 @@ fn detect_external(layout: &Layout, path_dirs: &[PathBuf]) -> Vec<(PathBuf, Opti
                     .map(|l| l.trim().to_string())
             })
             .filter(|s| !s.is_empty());
+        // Skip anything that identifies as wrvm — a symlink chain (e.g.
+        // shims/iwasm → /opt/homebrew/bin/wrvm) can canonicalize outside
+        // WRVM_HOME even though it *is* wrvm itself under another name.
+        if version
+            .as_deref()
+            .is_some_and(|v| v.starts_with("wrvm ") || v.starts_with("wrvm-"))
+        {
+            continue;
+        }
         out.push((canon, version));
     }
     out
@@ -192,7 +201,16 @@ fn default_rc() -> PathBuf {
 
 fn detect_hook(shims_dir: &Path) -> Option<String> {
     let home = std::env::var_os("HOME").map(PathBuf::from)?;
-    let needle = shims_dir.to_string_lossy().into_owned();
+    let shims_needle = shims_dir.to_string_lossy().into_owned();
+    // A rc file counts as wired if it either literally embeds the shims
+    // directory (from `wrvm shell-init >> rc`) OR carries the managed-line
+    // tag / an `eval "$(wrvm shell-init)"` snippet that `wrvm setup` writes
+    // (both mean the integration is active on shell start).
+    let needles = [
+        shims_needle.as_str(),
+        "# wrvm-managed:env",
+        "wrvm shell-init",
+    ];
     let files = [
         ".zshrc",
         ".bashrc",
@@ -203,7 +221,7 @@ fn detect_hook(shims_dir: &Path) -> Option<String> {
     for f in files {
         let path = home.join(f);
         if let Ok(text) = std::fs::read_to_string(&path) {
-            if text.contains(&needle) {
+            if needles.iter().any(|n| text.contains(n)) {
                 return Some(f.to_string());
             }
         }
