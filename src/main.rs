@@ -240,8 +240,32 @@ fn ensure_shims(layout: &Layout) -> Result<()> {
     Ok(())
 }
 
+/// On Windows the shim strategy is a **copy** rather than a symlink: Windows
+/// symlink creation requires either Developer Mode or admin privileges, so a
+/// plain user install can't rely on it. We copy the running `wrvm.exe` to
+/// `shims\iwasm.exe` and `shims\wamrc.exe`; busybox-style argv[0] dispatch
+/// then works identically to the unix symlink path.
+///
+/// Caveat: after `wrvm --upgrade` replaces the main binary, the shim copies
+/// still point at the old version until the next `wrvm` invocation
+/// refreshes them (this function re-copies when the file sizes differ). For
+/// day-to-day CLI use that's transparent.
 #[cfg(not(unix))]
-fn ensure_shims(_layout: &Layout) -> Result<()> {
+fn ensure_shims(layout: &Layout) -> Result<()> {
+    let exe = std::env::current_exe().context("locating the wrvm binary")?;
+    let shims_dir = layout.shims_dir();
+    std::fs::create_dir_all(&shims_dir)?;
+    let exe_size = std::fs::metadata(&exe).map(|m| m.len()).unwrap_or(0);
+    for name in ["iwasm.exe", "wamrc.exe"] {
+        let shim = layout.shim_bin(name);
+        // Skip if the existing shim already matches the current exe's size.
+        if let Ok(m) = std::fs::metadata(&shim) {
+            if m.len() == exe_size {
+                continue;
+            }
+        }
+        std::fs::copy(&exe, &shim).with_context(|| format!("copying shim {}", shim.display()))?;
+    }
     Ok(())
 }
 

@@ -30,6 +30,11 @@ jobs:
           - target: aarch64-apple-darwin
             runner: macos-14
             asset: wrvm-aarch64-macos
+          # Windows: only x86_64 for now — GitHub Actions aarch64-windows
+          # runners aren't consistently available in the public pool.
+          - target: x86_64-pc-windows-msvc
+            runner: windows-latest
+            asset: wrvm-x86_64-windows.exe
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -38,7 +43,8 @@ jobs:
           targets: ${{ matrix.target }}
       - name: build
         run: cargo build --release --target ${{ matrix.target }}
-      - name: package
+      - name: package (unix)
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           cp target/${{ matrix.target }}/release/wrvm ${{ matrix.asset }}
@@ -47,6 +53,14 @@ jobs:
           else
             shasum -a 256 ${{ matrix.asset }} > ${{ matrix.asset }}.sha256
           fi
+      - name: package (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Copy-Item "target\${{ matrix.target }}\release\wrvm.exe" "${{ matrix.asset }}"
+          # Match the unix `sha256sum` format: `<hex>  <filename>` on one line.
+          $hash = (Get-FileHash -Algorithm SHA256 "${{ matrix.asset }}").Hash.ToLower()
+          "$hash  ${{ matrix.asset }}" | Out-File -Encoding ascii -NoNewline "${{ matrix.asset }}.sha256"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset }}

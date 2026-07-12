@@ -3,6 +3,16 @@
 ## Unreleased
 
 ### Added
+- **Windows (x86_64) prebuilt binary** (`wrvm-x86_64-windows.exe`).
+  Release matrix builds it on `windows-latest` with a PowerShell
+  `Get-FileHash` step for the `.sha256` sidecar. On Windows the shim
+  strategy is a **copy** of the wrvm exe to `shims\iwasm.exe` /
+  `shims\wamrc.exe` (Windows symlinks need Developer Mode or admin);
+  argv[0] dispatch handles the rest. `.zip` archives are now
+  extracted end-to-end. CI matrix gains `windows-latest`. Not yet
+  covered: usage-log caller detection (Linux `/proc` and macOS `ps`
+  only) and `wrvm setup` for cmd.exe / PowerShell rc files — the
+  shim + shims-on-PATH is enough for scripted use.
 - **`wasi-extensions` installable on x86_64 hosts from upstream.** WAMR
   ships one arch-less `wamr-wasi-extensions-<ver>.zip` per release; wrvm
   now recognizes that shape (`Platform::matches_wasi_extensions_asset`)

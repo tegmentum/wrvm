@@ -37,12 +37,13 @@ fn asset_name() -> Result<String> {
         "aarch64" => "aarch64",
         other => bail!("unsupported architecture for self-upgrade: {other}"),
     };
-    let os = match std::env::consts::OS {
-        "linux" => "linux",
-        "macos" => "macos",
+    let (os, ext) = match std::env::consts::OS {
+        "linux" => ("linux", ""),
+        "macos" => ("macos", ""),
+        "windows" => ("windows", ".exe"),
         other => bail!("unsupported OS for self-upgrade: {other}"),
     };
-    Ok(format!("wrvm-{arch}-{os}"))
+    Ok(format!("wrvm-{arch}-{os}{ext}"))
 }
 
 pub fn run(check_only: bool) -> Result<()> {
