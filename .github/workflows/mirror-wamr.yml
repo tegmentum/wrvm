@@ -215,6 +215,9 @@ jobs:
         with:
           tag_name: wamr-mirror-${{ inputs.wamr_version }}
           name: WAMR ${{ inputs.wamr_version }} — aarch64 mirror
+          # Not a wrvm-tool release — keep wrvm's own v* tags as "latest"
+          # so /releases/latest returns the tool, not the mirror.
+          make_latest: false
           body: |
             aarch64 builds of WAMR ${{ inputs.wamr_version }}, mirrored from
             upstream source at tag `WAMR-${{ inputs.wamr_version }}` because

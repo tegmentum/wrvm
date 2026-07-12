@@ -156,9 +156,41 @@ fn now_epoch() -> i64 {
 }
 
 fn latest_release() -> Result<Release> {
+    // Ask GitHub for the release it flags as "latest" first — that already
+    // excludes prereleases + drafts and respects the `make_latest` flag we
+    // set on mirror publishes. Belt-and-suspenders: if the tag looks like a
+    // WAMR runtime mirror (e.g. because a prior mirror publish forgot to set
+    // make_latest: false), fall back to scanning /releases for the newest
+    // v*-tagged tool release.
     let url = format!("https://api.github.com/repos/{}/releases/latest", repo());
     let body = http::get_string(&url).with_context(|| format!("requesting {url}"))?;
-    serde_json::from_str(&body).context("parsing release JSON")
+    let release: Release = serde_json::from_str(&body).context("parsing release JSON")?;
+    if is_tool_release_tag(&release.tag_name) {
+        return Ok(release);
+    }
+    latest_tool_release()
+}
+
+/// True for tags that name a wrvm tool release (`v0.1.0`, `0.2.3`, …). False
+/// for mirror or auxiliary tags (`wamr-mirror-*`, `nightly-*`, …).
+fn is_tool_release_tag(tag: &str) -> bool {
+    let s = tag.trim_start_matches('v');
+    let first = s.split('.').next().unwrap_or("");
+    !first.is_empty() && first.chars().all(|c| c.is_ascii_digit())
+}
+
+/// Scan /releases and return the newest release whose tag looks like a
+/// wrvm tool version.
+fn latest_tool_release() -> Result<Release> {
+    let url = format!(
+        "https://api.github.com/repos/{}/releases?per_page=50",
+        repo()
+    );
+    let body = http::get_string(&url).with_context(|| format!("requesting {url}"))?;
+    let all: Vec<Release> = serde_json::from_str(&body).context("parsing releases JSON")?;
+    all.into_iter()
+        .find(|r| is_tool_release_tag(&r.tag_name))
+        .ok_or_else(|| anyhow!("no tool release found on {}", repo()))
 }
 
 fn replace_self(bytes: &[u8]) -> Result<()> {

@@ -188,7 +188,18 @@ pub fn fetch_release_versions(all: bool) -> Result<Vec<String>> {
         if r.prerelease && !all {
             continue;
         }
+        // Filter WAMR's pre-2.x tags — the repo also carries old date-shaped
+        // tags like `12-30-2021` and `fast-jit-06-29-2022` that aren't
+        // proper releases. Real releases are tagged `WAMR-<X.Y.Z>`.
+        if !r.tag_name.starts_with("WAMR-") {
+            continue;
+        }
         let version = normalize_version(&r.tag_name);
+        // Belt-and-suspenders: reject anything that doesn't parse as an exact
+        // version, so a stray `WAMR-nightly-foo` never leaks in.
+        if !matches!(VersionSpec::parse(&version), Ok(VersionSpec::Exact(_))) {
+            continue;
+        }
         let has_build = r
             .assets
             .iter()
