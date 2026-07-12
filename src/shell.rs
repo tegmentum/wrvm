@@ -83,7 +83,10 @@ pub fn setup(_layout: &Layout) -> Result<()> {
     }
     let existing = std::fs::read_to_string(&rc).unwrap_or_default();
     if existing.contains(MANAGED_TAG) {
-        eprintln!("wrvm setup: shell integration already present in {}", rc.display());
+        eprintln!(
+            "wrvm setup: shell integration already present in {}",
+            rc.display()
+        );
         return Ok(());
     }
 
