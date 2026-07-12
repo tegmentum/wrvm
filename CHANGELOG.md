@@ -2,12 +2,30 @@
 
 ## Unreleased
 
+## 0.1.2 — 2026-07-12
+
+### Added
+- **`wrvm setup`** — one-shot command that wires the shell integration into
+  the user's login-shell rc file (idempotent via a `# wrvm-managed:env`
+  tag). Complements `wrvm shell-init` (which just prints the snippet). The
+  Homebrew caveat now points at `wrvm setup` because Homebrew sandboxes
+  formula install steps and can't safely modify `$HOME`.
+- Homebrew formula now installs a stable snippet at
+  `#{prefix}/share/wrvm/wrvm.{sh,fish}` so users who prefer `source`
+  over `wrvm setup` have a fixed path to reference.
+
+## 0.1.1 — 2026-07-12
+
 ### Added
 - **Intel macOS prebuilt binary** (`wrvm-x86_64-macos`), cross-compiled from
   Apple Silicon (`macos-14`) to sidestep the macos-13 (Intel) runner queue.
 - **`wasi-extensions` in the aarch64 mirror**, built with wasi-sdk in
   `mirror-wamr.yml`. Existing mirror releases are unaffected; re-run the
   workflow for a version to add the variant.
+
+### Fixed
+- Homebrew formula chmods the release asset to `0755` before install so
+  Homebrew's post-install completion generation can execute the binary.
 
 ## 0.1.0 — 2026-07-12
 

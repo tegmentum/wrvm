@@ -1,27 +1,27 @@
 class Wrvm < Formula
   desc "wrvm — WAMR (WebAssembly Micro Runtime) version manager"
   homepage "https://github.com/tegmentum/wrvm"
-  version "0.1.1"
+  version "0.1.2"
   license "Apache-2.0"
 
   # Fill in per-platform sha256 values from the published release assets.
   on_macos do
     if Hardware::CPU.intel?
       url "https://github.com/tegmentum/wrvm/releases/download/v#{version}/wrvm-x86_64-macos"
-      sha256 "1dafacf5c256260c5a20e0eb83856f628e82a48148b84a03a0e184da7212a4af"
+      sha256 "FILL_IN_SHA256_MACOS_X86_64"
     else
       url "https://github.com/tegmentum/wrvm/releases/download/v#{version}/wrvm-aarch64-macos"
-      sha256 "a3dd52aaf8083888b8e62cef359237b411eb4fd323b061b949ee92cf195eb051"
+      sha256 "FILL_IN_SHA256_MACOS_AARCH64"
     end
   end
 
   on_linux do
     if Hardware::CPU.intel?
       url "https://github.com/tegmentum/wrvm/releases/download/v#{version}/wrvm-x86_64-linux"
-      sha256 "fbf89a41272405bbab25a3121947816783afb81e0567d212156b0afd299d079d"
+      sha256 "FILL_IN_SHA256_LINUX_X86_64"
     else
       url "https://github.com/tegmentum/wrvm/releases/download/v#{version}/wrvm-aarch64-linux"
-      sha256 "405a18a9e658db8356c97ea7b3f084faea0349fe5f1b4eb50b268fd04f5ae0b2"
+      sha256 "FILL_IN_SHA256_LINUX_AARCH64"
     end
   end
 
@@ -56,22 +56,22 @@ class Wrvm < Formula
 
   def caveats
     <<~EOS
-      To enable per-shell `wrvm use` and route `iwasm`/`wamrc` on PATH
-      through wrvm's shims, add one line to your shell rc:
+      To finish setup — wire `iwasm`/`wamrc` on PATH through wrvm's shims
+      and enable per-shell `wrvm use` — run once:
 
-          # bash / zsh:
-          echo 'source "$(brew --prefix wrvm)/share/wrvm/wrvm.sh"' >> ~/.zshrc
-
-          # fish:
-          echo 'source (brew --prefix wrvm)/share/wrvm/wrvm.fish' \\
-              >> ~/.config/fish/config.fish
+          wrvm setup
 
       Then restart your shell (or run `eval "$(wrvm shell-init)"` to
       activate it in the current shell without restarting).
 
+      `wrvm setup` is idempotent and tags its line with `# wrvm-managed`
+      so uninstalling the integration is a one-liner:
+
+          grep -v '# wrvm-managed' ~/.zshrc > ~/.zshrc.tmp && mv ~/.zshrc.tmp ~/.zshrc
+
       Homebrew sandboxes formula install steps and cannot safely modify
-      files under $HOME; the `curl | sh` installer wires this up
-      automatically.
+      files under $HOME, which is why `wrvm setup` runs from wrvm itself
+      rather than as part of `brew install`.
 
       NOTE: WAMR upstream publishes x86_64 binaries only. On aarch64 hosts
       (Apple Silicon, ARM Linux), `wrvm install` resolves runtime downloads

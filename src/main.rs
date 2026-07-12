@@ -75,6 +75,10 @@ fn run() -> Result<()> {
         print!("{}", shell::integration(&layout.shims_dir()));
         return Ok(());
     }
+    if args.first().map(String::as_str) == Some("setup") {
+        let layout = Layout::discover()?;
+        return shell::setup(&layout);
+    }
 
     let layout = Layout::discover()?;
     std::fs::create_dir_all(&layout.root)
@@ -292,6 +296,7 @@ fn print_help() {
     );
     println!("  deactivate           Clear the per-shell override (revert to default)");
     println!("  shell-init           Print the shell hook enabling per-shell `use`");
+    println!("  setup                Wire the shell hook into your login-shell rc (idempotent)");
     println!("  uninstall <version> [--variant <v>] [--force]   Remove an installed runtime");
     println!("  register <app-dir>   Record an app's runtime dependency (reads its wrvm.toml)");
     println!("  unregister <name>    Drop an application's registration");

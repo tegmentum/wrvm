@@ -157,8 +157,11 @@ still needs (`--force` overrides). `wrvm register <dir>` / `wrvm unregister
   *runtimes*.
 - `wrvm completions <bash|zsh|fish>` — print a completion script (the installer
   does this automatically).
-- `wrvm shell-init` — print the shell integration (PATH + `use` hook) if you
-  need to wire it up manually.
+- `wrvm shell-init` — print the shell integration (PATH + `use` hook) as a
+  snippet you can source or paste into your rc.
+- `wrvm setup` — wire the shell integration into your login-shell rc for
+  you (idempotent). Run this once after `brew install wrvm`; the
+  `curl | sh` installer does it automatically.
 - `wrvm doctor` — diagnose the install, shell integration, and PATH.
 
 ## Gotchas
