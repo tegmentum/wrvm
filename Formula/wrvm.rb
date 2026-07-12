@@ -35,11 +35,55 @@ class Wrvm < Formula
     generate_completions_from_executable(bin/"wrvm", "completions")
   end
 
+  # Wire the wrvm shell integration into the user's login-shell rc file so
+  # `iwasm` on PATH routes through wrvm and `wrvm use` works immediately.
+  # Matches what `install.sh` does; idempotent via a `# wrvm-managed:env`
+  # tag so re-runs are no-ops and uninstall is one grep away.
+  #
+  # (Homebrew's style guide discourages this for core formulas. For this
+  # third-party tap the "shell-init is part of the install" UX wins.)
+  def post_install
+    home = ENV["HOME"]
+    return if home.nil? || home.empty?
+
+    shell_base = File.basename(ENV["SHELL"] || "")
+    rc, line = case shell_base
+               when "zsh"
+                 [File.join(ENV["ZDOTDIR"] || home, ".zshrc"),
+                  'eval "$(wrvm shell-init)" # wrvm-managed:env']
+               when "bash"
+                 [File.join(home, ".bashrc"),
+                  'eval "$(wrvm shell-init)" # wrvm-managed:env']
+               when "fish"
+                 [File.join(home, ".config/fish/config.fish"),
+                  'wrvm shell-init | source # wrvm-managed:env']
+               else
+                 [File.join(home, ".profile"),
+                  'eval "$(wrvm shell-init)" # wrvm-managed:env']
+               end
+
+    FileUtils.mkdir_p(File.dirname(rc))
+    existing = File.exist?(rc) ? File.read(rc) : ""
+
+    if existing.include?("# wrvm-managed:env")
+      ohai "wrvm shell integration already present in #{rc}"
+      return
+    end
+
+    File.open(rc, "a") do |f|
+      f.puts if !existing.empty? && !existing.end_with?("\n")
+      f.puts line
+    end
+    ohai "Added wrvm shell integration to #{rc}"
+  end
+
   def caveats
     <<~EOS
-      Enable per-shell `wrvm use` and the pass-through `iwasm` shim:
-          wrvm shell-init >> ~/.zshrc     # or your shell's rc
-      Then restart your shell.
+      wrvm shell integration was added to your shell rc (tagged `# wrvm-managed`).
+      Restart your shell — or run `eval "$(wrvm shell-init)"` — to activate it now.
+
+      Remove the integration with:
+          grep -v '# wrvm-managed' ~/.zshrc > ~/.zshrc.tmp && mv ~/.zshrc.tmp ~/.zshrc
 
       NOTE: WAMR upstream publishes x86_64 binaries only. On aarch64 hosts
       (Apple Silicon, ARM Linux), `wrvm install` resolves runtime downloads
