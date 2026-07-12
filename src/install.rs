@@ -263,10 +263,20 @@ fn install_inner(
     // Prefer upstream. On aarch64, fall back to the in-repo mirror. Track the
     // sibling asset list from whichever release the pick came from, so
     // sidecar `.sha256` lookup below hits the right release.
+    //
+    // `wasi-extensions` on the upstream release is a special case: WAMR ships
+    // one arch-less `wamr-wasi-extensions-<ver>.zip` per release (no
+    // `<arch>-<runner>` suffix), so the general matcher rejects it. Check the
+    // upstream-specific shape first for x86_64 hosts.
     let upstream_hit = release
         .assets
         .iter()
-        .find(|a| platform.matches_asset(&a.name, variant, &version))
+        .find(|a| {
+            (variant == "wasi-extensions"
+                && !platform.needs_mirror
+                && platform.matches_wasi_extensions_asset(&a.name, &version))
+                || platform.matches_asset(&a.name, variant, &version)
+        })
         .cloned();
     let (asset, siblings) = match (upstream_hit, platform.needs_mirror) {
         (Some(a), _) => (a, release.assets.clone()),
@@ -394,7 +404,18 @@ fn materialize_install(
     archive_sha256: String,
 ) -> Result<usize> {
     let extract = Spinner::new("Extracting archive");
-    let files = archive::extract_tar_gz(archive_path)?;
+    // Dispatch on the archive's own extension rather than the host's default
+    // `platform.ext`, so a `.zip` upstream asset installed on a `.tar.gz`
+    // host (wasi-extensions on x86_64 linux/macos) picks the right decoder.
+    let files = if archive_path
+        .extension()
+        .and_then(|s| s.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("zip"))
+    {
+        archive::extract_zip(archive_path)?
+    } else {
+        archive::extract_tar_gz(archive_path)?
+    };
     extract.finish(&format!("Extracted {} files", files.len()));
 
     let staging = layout

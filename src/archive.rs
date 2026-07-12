@@ -1,5 +1,6 @@
-//! Archive extraction. v0.1 supports `.tar.gz` (Linux/macOS WAMR releases).
-//! Windows `.zip` support is deferred alongside Windows install support.
+//! Archive extraction. Supports `.tar.gz` (Linux/macOS WAMR releases) and
+//! `.zip` (upstream `wamr-wasi-extensions-<ver>.zip` on x86_64, Windows
+//! releases when we ship them).
 
 use anyhow::{bail, Context, Result};
 use flate2::read::GzDecoder;
@@ -91,6 +92,70 @@ fn has_single_top(raw: &[(Vec<String>, u32, Vec<u8>)]) -> bool {
         }
     }
     top.is_some()
+}
+
+/// Extract a `.zip` archive with the same top-level-directory stripping and
+/// `bin/` routing rules as [`extract_tar_gz`]. Used for upstream x86_64
+/// `wamr-wasi-extensions-<ver>.zip` (which has no arch-runner suffix) and
+/// planned Windows `.zip` releases.
+pub fn extract_zip(archive: &Path) -> Result<Vec<ExtractedFile>> {
+    let file = std::fs::File::open(archive)
+        .with_context(|| format!("opening archive {}", archive.display()))?;
+    let mut zip = zip::ZipArchive::new(BufReader::new(file)).context("reading zip archive")?;
+
+    let mut raw: Vec<(Vec<String>, u32, Vec<u8>)> = Vec::new();
+    for i in 0..zip.len() {
+        let mut entry = zip
+            .by_index(i)
+            .with_context(|| format!("reading zip entry {i}"))?;
+        if !entry.is_file() {
+            continue;
+        }
+        let name = entry.name().to_string();
+        let comps: Vec<String> = Path::new(&name)
+            .components()
+            .filter_map(|c| match c {
+                std::path::Component::Normal(s) => s.to_str().map(String::from),
+                _ => None,
+            })
+            .collect();
+        if comps.is_empty() {
+            continue;
+        }
+        // Zip stores unix mode in the upper 16 bits of external_attributes when
+        // the entry was created on a unix-family host; fall back to 0o644.
+        let mode = entry.unix_mode().unwrap_or(0o644);
+        let mut data = Vec::new();
+        entry
+            .read_to_end(&mut data)
+            .with_context(|| format!("reading zip entry {name}"))?;
+        raw.push((comps, mode, data));
+    }
+
+    if raw.is_empty() {
+        bail!("archive {} contained no files", archive.display());
+    }
+
+    let strip = has_single_top(&raw);
+    let mut out = Vec::with_capacity(raw.len());
+    for (comps, mode, data) in raw {
+        let rest: Vec<&str> = if strip && comps.len() > 1 {
+            comps[1..].iter().map(String::as_str).collect()
+        } else {
+            comps.iter().map(String::as_str).collect()
+        };
+        if rest.is_empty() {
+            continue;
+        }
+        let joined = rest.join("/");
+        let logical = route(&joined);
+        out.push(ExtractedFile {
+            logical_path: logical,
+            mode,
+            data,
+        });
+    }
+    Ok(out)
 }
 
 /// Route recognized executables into `bin/` so every variant has a predictable
@@ -191,5 +256,54 @@ mod tests {
         // Nested paths carry a slash and are never rewritten, even for iwasm.
         assert_eq!(route("share/wamr/iwasm"), "share/wamr/iwasm");
         assert_eq!(route("include/wasi/api.h"), "include/wasi/api.h");
+    }
+
+    /// Build an in-memory `.zip` at `dest` from `(path, mode, bytes)` tuples.
+    fn build_zip(dest: &Path, entries: &[(&str, u32, &[u8])]) {
+        use std::io::Write;
+        let file = std::fs::File::create(dest).unwrap();
+        let mut zw = zip::ZipWriter::new(file);
+        let opts: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        for (path, mode, bytes) in entries {
+            zw.start_file(*path, opts.unix_permissions(*mode)).unwrap();
+            zw.write_all(bytes).unwrap();
+        }
+        zw.finish().unwrap();
+    }
+
+    #[test]
+    fn extract_zip_strips_single_top_level_dir() {
+        let tmp = tempdir().unwrap();
+        let path = tmp.path().join("t.zip");
+        build_zip(
+            &path,
+            &[
+                (
+                    "wamr-wasi-extensions-2.4.5/include/wasi/api.h",
+                    0o644,
+                    b"hdr",
+                ),
+                ("wamr-wasi-extensions-2.4.5/lib/libfoo.a", 0o644, b"static"),
+            ],
+        );
+        let files = extract_zip(&path).unwrap();
+        let paths: Vec<_> = files.iter().map(|f| f.logical_path.as_str()).collect();
+        assert!(paths.contains(&"include/wasi/api.h"));
+        assert!(paths.contains(&"lib/libfoo.a"));
+    }
+
+    #[test]
+    fn extract_zip_routes_bare_iwasm_exe() {
+        let tmp = tempdir().unwrap();
+        let path = tmp.path().join("t.zip");
+        build_zip(
+            &path,
+            &[("iwasm.exe", 0o755, b"exe"), ("LICENSE", 0o644, b"lic")],
+        );
+        let files = extract_zip(&path).unwrap();
+        let paths: Vec<_> = files.iter().map(|f| f.logical_path.as_str()).collect();
+        assert!(paths.contains(&"bin/iwasm.exe"));
+        assert!(paths.contains(&"LICENSE"));
     }
 }

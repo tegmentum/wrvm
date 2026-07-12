@@ -61,7 +61,7 @@ installable pinned via `--variant`:
 | `iwasm` (default) | Runtime (interpreter + JIT). |
 | `iwasm-gc-eh`     | Same runtime, with GC + Exception Handling proposals. |
 | `wamrc`           | AOT compiler. |
-| `wasi-extensions` | Headers + libs for embedding `libiwasm` (upstream x86_64 only for now — see aarch64 note below). |
+| `wasi-extensions` | Headers + libs for embedding `libiwasm`. |
 
 Multiple variants of the same version coexist under
 `~/.tegmentum/wrvm/runtimes/wamr/versions/<v>/<variant>/`.

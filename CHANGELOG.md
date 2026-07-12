@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+- **`wasi-extensions` installable on x86_64 hosts from upstream.** WAMR
+  ships one arch-less `wamr-wasi-extensions-<ver>.zip` per release; wrvm
+  now recognizes that shape (`Platform::matches_wasi_extensions_asset`)
+  and dispatches to a new `archive::extract_zip` when the picked asset
+  has a `.zip` extension. Zero effect on the aarch64 mirror path, which
+  already ships a per-runner tarball.
+
 ### Fixed
 - `wrvm --upgrade` on a Homebrew-installed binary no longer fails with a
   confusing `EACCES`/`EPERM` when trying to atomically replace the

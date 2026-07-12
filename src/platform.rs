@@ -58,6 +58,13 @@ impl Platform {
     /// Returns `true` when `asset_name` matches this host for the given
     /// variant+version. `<os-runner>` is opaque (varies with CI runner
     /// version), so we probe by prefix + host pattern rather than compute it.
+    /// Upstream WAMR ships `wamr-wasi-extensions-<version>.zip` — a single
+    /// arch-less zip asset per release — for the `wasi-extensions` variant.
+    /// Match it exactly by name, ignoring the host's regular asset shape.
+    pub fn matches_wasi_extensions_asset(&self, asset_name: &str, version: &str) -> bool {
+        asset_name == format!("wamr-wasi-extensions-{version}.zip")
+    }
+
     pub fn matches_asset(&self, asset_name: &str, variant: &str, version: &str) -> bool {
         let prefix = format!("{variant}-{version}-{}-", self.arch);
         let Some(rest) = asset_name.strip_prefix(&prefix) else {
@@ -142,5 +149,16 @@ mod tests {
     fn label_formats() {
         assert_eq!(macos_aarch64().label(), "macos-aarch64");
         assert_eq!(linux_x86_64().label(), "linux-x86_64");
+    }
+
+    #[test]
+    fn wasi_extensions_asset_matches_upstream_shape() {
+        let p = linux_x86_64();
+        assert!(p.matches_wasi_extensions_asset("wamr-wasi-extensions-2.4.5.zip", "2.4.5"));
+        assert!(!p.matches_wasi_extensions_asset("wamr-wasi-extensions-2.4.4.zip", "2.4.5"));
+        assert!(!p.matches_wasi_extensions_asset(
+            "wasi-extensions-2.4.5-x86_64-ubuntu-22.04.tar.gz",
+            "2.4.5"
+        ));
     }
 }
