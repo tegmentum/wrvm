@@ -47,6 +47,14 @@ fn asset_name() -> Result<String> {
 
 pub fn run(check_only: bool) -> Result<()> {
     let current = env!("CARGO_PKG_VERSION");
+
+    if let Some(exe) = canonical_current_exe() {
+        if is_brew_owned(&exe) {
+            print_brew_notice(current);
+            return Ok(());
+        }
+    }
+
     let release = latest_release().context("checking for the latest wrvm release")?;
     let latest = util::normalize_version(release.tag_name.trim());
 
@@ -96,6 +104,14 @@ pub fn run(check_only: bool) -> Result<()> {
 pub fn notify(layout: &Layout) {
     if std::env::var_os("WRVM_NO_UPDATE_NOTIFIER").is_some() {
         return;
+    }
+    // Homebrew-installed binaries can't be replaced in place — Homebrew owns
+    // the Cellar file — so nagging about `wrvm --upgrade` would just point at
+    // a command that can't work. `brew upgrade wrvm` is the right channel.
+    if let Some(exe) = canonical_current_exe() {
+        if is_brew_owned(&exe) {
+            return;
+        }
     }
     let current = env!("CARGO_PKG_VERSION");
     let now = now_epoch();
@@ -229,4 +245,66 @@ fn set_executable(path: &Path) -> Result<()> {
 #[cfg(not(unix))]
 fn set_executable(_path: &Path) -> Result<()> {
     Ok(())
+}
+
+/// Canonicalize `std::env::current_exe()` so symlink shims (e.g. Homebrew's
+/// `/opt/homebrew/bin/wrvm` -> `…/Cellar/wrvm/<ver>/bin/wrvm`) resolve to the
+/// real, package-manager-owned file. Returns `None` if either lookup fails.
+fn canonical_current_exe() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    std::fs::canonicalize(&exe).ok().or(Some(exe))
+}
+
+/// True when `exe` lives inside a Homebrew Cellar for the `wrvm` formula on
+/// any of the three supported prefixes (Apple Silicon, Intel macOS,
+/// Linuxbrew). Callers should pass a canonicalized path.
+fn is_brew_owned(exe: &Path) -> bool {
+    let s = exe.to_string_lossy();
+    s.contains("/opt/homebrew/Cellar/wrvm/")
+        || s.contains("/usr/local/Cellar/wrvm/")
+        || s.contains("/home/linuxbrew/.linuxbrew/Cellar/wrvm/")
+}
+
+fn print_brew_notice(current: &str) {
+    println!("wrvm {current} is installed via Homebrew; `wrvm --upgrade` cannot replace a brew-owned file.");
+    println!("Upgrade with:");
+    println!("    brew upgrade wrvm");
+    println!("If brew reports no newer version, refresh its formula index first:");
+    println!("    brew update && brew upgrade wrvm");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_brew_owned;
+    use std::path::Path;
+
+    #[test]
+    fn brew_owned_apple_silicon() {
+        assert!(is_brew_owned(Path::new(
+            "/opt/homebrew/Cellar/wrvm/0.1.3/bin/wrvm"
+        )));
+    }
+
+    #[test]
+    fn brew_owned_intel_macos() {
+        assert!(is_brew_owned(Path::new(
+            "/usr/local/Cellar/wrvm/0.1.3/bin/wrvm"
+        )));
+    }
+
+    #[test]
+    fn brew_owned_linuxbrew() {
+        assert!(is_brew_owned(Path::new(
+            "/home/linuxbrew/.linuxbrew/Cellar/wrvm/0.1.3/bin/wrvm"
+        )));
+    }
+
+    #[test]
+    fn not_brew_owned() {
+        assert!(!is_brew_owned(Path::new("/usr/local/bin/wrvm")));
+        assert!(!is_brew_owned(Path::new("/home/alice/.cargo/bin/wrvm")));
+        assert!(!is_brew_owned(Path::new(
+            "/home/alice/.tegmentum/wrvm/bin/wrvm"
+        )));
+    }
 }

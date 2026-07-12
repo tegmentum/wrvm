@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Fixed
+- `wrvm --upgrade` on a Homebrew-installed binary no longer fails with a
+  confusing `EACCES`/`EPERM` when trying to atomically replace the
+  brew-owned Cellar file. Selfupdate now canonicalizes the running
+  executable, detects paths under `/opt/homebrew/Cellar/wrvm/`,
+  `/usr/local/Cellar/wrvm/`, or `/home/linuxbrew/.linuxbrew/Cellar/wrvm/`,
+  and prints a friendly notice pointing at `brew upgrade wrvm`
+  (or `brew update && brew upgrade wrvm` if the formula index is stale).
+  The background "newer version available" notifier is also suppressed
+  in this case, since the advertised command wouldn't work.
+
 ## 0.1.3 — 2026-07-12
 
 ### Fixed
