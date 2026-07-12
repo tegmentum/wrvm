@@ -19,13 +19,14 @@ jobs:
           - target: aarch64-unknown-linux-gnu
             runner: ubuntu-24.04-arm
             asset: wrvm-aarch64-linux
-          # x86_64-apple-darwin builds run on `macos-13` (Intel). Those runners
-          # are consistently backlogged for hours in the public GitHub Actions
-          # queue. Deferred until availability recovers; Intel macOS users can
-          # build from source with `cargo build --release` in the meantime.
-          # - target: x86_64-apple-darwin
-          #   runner: macos-13
-          #   asset: wrvm-x86_64-macos
+          # Build x86_64-apple-darwin by cross-compiling from Apple Silicon
+          # (macos-14). This avoids the macos-13 (Intel) runner queue, which
+          # backlogs for hours in the public GitHub Actions pool. Rust's
+          # macOS cross-target ships in `dtolnay/rust-toolchain@stable` via
+          # the `targets:` input; no extra toolchain setup is needed.
+          - target: x86_64-apple-darwin
+            runner: macos-14
+            asset: wrvm-x86_64-macos
           - target: aarch64-apple-darwin
             runner: macos-14
             asset: wrvm-aarch64-macos

@@ -16,10 +16,7 @@ name: mirror-wamr
 #   • iwasm            — plain interpreter/JIT runtime
 #   • iwasm-gc-eh      — runtime with GC + Exception Handling proposals
 #   • wamrc            — AOT compiler (needs LLVM; cached across runs)
-#
-# `wasi-extensions` is NOT built here yet: its cmake target compiles C sources
-# that include `<wasi/api.h>` from wasi-libc, which requires a wasi-sdk
-# toolchain rather than the native host compiler. Adding that is future work.
+#   • wasi-extensions  — headers + libs for embedding (built with wasi-sdk)
 
 on:
   workflow_dispatch:
@@ -34,6 +31,9 @@ permissions:
 
 env:
   WAMR_REPO: bytecodealliance/wasm-micro-runtime
+  # Bump this when a newer wasi-sdk release becomes desirable. Asset names
+  # are picked from the assets list per-runner, so only the tag matters.
+  WASI_SDK_TAG: wasi-sdk-25
 
 jobs:
   build:
@@ -179,8 +179,52 @@ jobs:
           rm -rf out
 
       # ------------------------------------------------------------------
-      # wasi-extensions is intentionally skipped — see the header comment.
+      # wasi-extensions
+      #
+      # This subproject's C sources include <wasi/api.h> from wasi-libc,
+      # which only ships with wasi-sdk (a Clang cross-compiler targeting
+      # WebAssembly). Install a matching wasi-sdk release, hand cmake the
+      # bundled toolchain file, and package the install tree.
       # ------------------------------------------------------------------
+      - name: install wasi-sdk
+        run: |
+          host_os=$(uname -s | tr '[:upper:]' '[:lower:]')
+          host_arch=$(uname -m)
+          case "$host_arch" in
+            aarch64|arm64) host_arch=arm64 ;;
+            x86_64) host_arch=x86_64 ;;
+          esac
+          case "$host_os" in
+            darwin) sdk_os=macos ;;
+            linux)  sdk_os=linux ;;
+            *) echo "unsupported host os for wasi-sdk: $host_os" >&2; exit 1 ;;
+          esac
+          asset="${WASI_SDK_TAG}.0-${host_arch}-${sdk_os}.tar.gz"
+          url="https://github.com/WebAssembly/wasi-sdk/releases/download/${WASI_SDK_TAG}/${asset}"
+          echo "fetching $url"
+          curl -fL "$url" -o wasi-sdk.tar.gz
+          mkdir -p wasi-sdk
+          tar -xzf wasi-sdk.tar.gz -C wasi-sdk --strip-components=1
+          echo "WASI_SDK_PATH=$PWD/wasi-sdk" >> "$GITHUB_ENV"
+
+      - name: build wasi-extensions
+        working-directory: wamr/wamr-wasi-extensions
+        run: |
+          mkdir -p build && cd build
+          cmake -DCMAKE_TOOLCHAIN_FILE="$WASI_SDK_PATH/share/cmake/wasi-sdk.cmake" \
+                -DCMAKE_INSTALL_PREFIX=../install ..
+          cmake --build . -j $(${{ matrix.cores }})
+          cmake --install .
+
+      - name: package wasi-extensions
+        run: |
+          ver=${{ inputs.wamr_version }}
+          name=wasi-extensions-${ver}-${{ matrix.os_token }}
+          mkdir -p out/${name}
+          cp -R wamr/wamr-wasi-extensions/install/. out/${name}/
+          cp wamr/LICENSE out/${name}/LICENSE || true
+          tar -C out -czf ${name}.tar.gz ${name}
+          rm -rf out
 
       # ------------------------------------------------------------------
       # Checksums + upload
@@ -224,9 +268,8 @@ jobs:
             upstream publishes x86_64 assets only.
 
             Built variants: `iwasm` (plain), `iwasm-gc-eh` (GC + Exception
-            Handling), `wamrc` (AOT compiler). `wasi-extensions` is not
-            mirrored yet — its cmake target needs a wasi-sdk toolchain rather
-            than a native compiler; that's tracked as follow-up work.
+            Handling), `wamrc` (AOT compiler), `wasi-extensions` (headers +
+            libs for embedding, built with wasi-sdk).
 
             wrvm resolves these automatically on aarch64 hosts; each asset
             ships with a `.sha256` sidecar that wrvm verifies on install.
