@@ -53,6 +53,25 @@ jobs:
           git clone --depth 1 --branch WAMR-${{ inputs.wamr_version }} \
             https://github.com/${{ env.WAMR_REPO }}.git wamr
 
+      # WAMR's wamr-compiler/build_llvm.sh needs `ccache` (LLVM cmake refuses
+      # otherwise with LLVM_CCACHE_BUILD=ON) and `pip install requests`.
+      # Both runners already have git, python3, cmake, make, and a C++ toolchain.
+      - name: install build prereqs (linux)
+        if: matrix.posix_dir == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ccache
+
+      - name: install build prereqs (macos)
+        if: matrix.posix_dir == 'darwin'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: 1
+        run: |
+          brew install ccache
+          # macOS Homebrew Python enforces PEP 668; build_llvm.sh runs a
+          # `pip install -r requirements.txt` we need to let through.
+          echo "PIP_BREAK_SYSTEM_PACKAGES=1" >> "$GITHUB_ENV"
+
       # ------------------------------------------------------------------
       # iwasm (plain)
       # ------------------------------------------------------------------
