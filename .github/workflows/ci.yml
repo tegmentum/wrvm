@@ -28,3 +28,52 @@ jobs:
         run: cargo build --release
       - name: test
         run: cargo test --release
+      - name: smoke-test binary
+        shell: bash
+        run: |
+          set -eo pipefail
+          BIN=./target/release/wrvm
+
+          # 1. `--version` prints exactly `wrvm <crate-version>`.
+          expected_version="$(awk -F'"' '/^version = "/ {print $2; exit}' Cargo.toml)"
+          if [ -z "$expected_version" ]; then
+            echo "smoke: could not parse crate version from Cargo.toml" >&2
+            exit 1
+          fi
+          actual_version="$("$BIN" --version)"
+          if [ "$actual_version" != "wrvm ${expected_version}" ]; then
+            echo "smoke: --version mismatch: expected 'wrvm ${expected_version}', got '${actual_version}'" >&2
+            exit 1
+          fi
+
+          # 2. `--help` exits 0 and its stdout carries the expected keywords.
+          help_out="$("$BIN" --help)"
+          for needle in "Commands:" install list default doctor setup; do
+            if ! printf '%s\n' "$help_out" | grep -qF -- "$needle"; then
+              echo "smoke: --help output missing '$needle'" >&2
+              printf '%s\n' "$help_out" >&2
+              exit 1
+            fi
+          done
+
+          # 3. `completions bash` first line is non-empty (the header comment).
+          first_line="$("$BIN" completions bash | head -n 1)"
+          if [ -z "$first_line" ]; then
+            echo "smoke: completions bash produced no output" >&2
+            exit 1
+          fi
+
+          # 4. `doctor` reaches its main flow. Exit code intentionally ignored:
+          # doctor exits 1 whenever it reports problems, which is expected in
+          # CI where nothing is wired up.
+          doctor_home="$(mktemp -d)"
+          set +e
+          doctor_out="$(WRVM_HOME="$doctor_home" "$BIN" doctor 2>&1)"
+          set -e
+          for needle in "wrvm doctor" "WRVM_HOME"; do
+            if ! printf '%s\n' "$doctor_out" | grep -qF -- "$needle"; then
+              echo "smoke: doctor output missing '$needle'" >&2
+              printf '%s\n' "$doctor_out" >&2
+              exit 1
+            fi
+          done
