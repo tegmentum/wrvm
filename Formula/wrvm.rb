@@ -35,55 +35,43 @@ class Wrvm < Formula
     generate_completions_from_executable(bin/"wrvm", "completions")
   end
 
-  # Wire the wrvm shell integration into the user's login-shell rc file so
-  # `iwasm` on PATH routes through wrvm and `wrvm use` works immediately.
-  # Matches what `install.sh` does; idempotent via a `# wrvm-managed:env`
-  # tag so re-runs are no-ops and uninstall is one grep away.
-  #
-  # (Homebrew's style guide discourages this for core formulas. For this
-  # third-party tap the "shell-init is part of the install" UX wins.)
+  # Ship a shell-integration snippet at a stable Cellar path so the caveat
+  # gives users a single unchanging line to source. Homebrew sandboxes
+  # post_install and redirects $HOME, so formulas can't safely wire up
+  # user rc files themselves — the `curl | sh` installer does that. This
+  # is the Homebrew-idiomatic compromise (nvm, zoxide, direnv all do the
+  # same: install the machinery, ask the user to add one line to their rc).
   def post_install
-    home = ENV["HOME"]
-    return if home.nil? || home.empty?
-
-    shell_base = File.basename(ENV["SHELL"] || "")
-    rc, line = case shell_base
-               when "zsh"
-                 [File.join(ENV["ZDOTDIR"] || home, ".zshrc"),
-                  'eval "$(wrvm shell-init)" # wrvm-managed:env']
-               when "bash"
-                 [File.join(home, ".bashrc"),
-                  'eval "$(wrvm shell-init)" # wrvm-managed:env']
-               when "fish"
-                 [File.join(home, ".config/fish/config.fish"),
-                  'wrvm shell-init | source # wrvm-managed:env']
-               else
-                 [File.join(home, ".profile"),
-                  'eval "$(wrvm shell-init)" # wrvm-managed:env']
-               end
-
-    FileUtils.mkdir_p(File.dirname(rc))
-    existing = File.exist?(rc) ? File.read(rc) : ""
-
-    if existing.include?("# wrvm-managed:env")
-      ohai "wrvm shell integration already present in #{rc}"
-      return
-    end
-
-    File.open(rc, "a") do |f|
-      f.puts if !existing.empty? && !existing.end_with?("\n")
-      f.puts line
-    end
-    ohai "Added wrvm shell integration to #{rc}"
+    (share/"wrvm").mkpath
+    (share/"wrvm/wrvm.sh").write <<~SH
+      # wrvm shell integration (source from bash/zsh rc).
+      # Regenerates on every shell start so wrvm updates are picked up.
+      command -v wrvm >/dev/null && eval "$(wrvm shell-init)"
+    SH
+    (share/"wrvm/wrvm.fish").write <<~FISH
+      # wrvm shell integration for fish.
+      command -v wrvm >/dev/null; and wrvm shell-init | source
+    FISH
   end
 
   def caveats
     <<~EOS
-      wrvm shell integration was added to your shell rc (tagged `# wrvm-managed`).
-      Restart your shell — or run `eval "$(wrvm shell-init)"` — to activate it now.
+      To enable per-shell `wrvm use` and route `iwasm`/`wamrc` on PATH
+      through wrvm's shims, add one line to your shell rc:
 
-      Remove the integration with:
-          grep -v '# wrvm-managed' ~/.zshrc > ~/.zshrc.tmp && mv ~/.zshrc.tmp ~/.zshrc
+          # bash / zsh:
+          echo 'source "$(brew --prefix wrvm)/share/wrvm/wrvm.sh"' >> ~/.zshrc
+
+          # fish:
+          echo 'source (brew --prefix wrvm)/share/wrvm/wrvm.fish' \\
+              >> ~/.config/fish/config.fish
+
+      Then restart your shell (or run `eval "$(wrvm shell-init)"` to
+      activate it in the current shell without restarting).
+
+      Homebrew sandboxes formula install steps and cannot safely modify
+      files under $HOME; the `curl | sh` installer wires this up
+      automatically.
 
       NOTE: WAMR upstream publishes x86_64 binaries only. On aarch64 hosts
       (Apple Silicon, ARM Linux), `wrvm install` resolves runtime downloads
