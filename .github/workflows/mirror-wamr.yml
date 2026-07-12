@@ -16,7 +16,10 @@ name: mirror-wamr
 #   • iwasm            — plain interpreter/JIT runtime
 #   • iwasm-gc-eh      — runtime with GC + Exception Handling proposals
 #   • wamrc            — AOT compiler (needs LLVM; cached across runs)
-#   • wasi-extensions  — headers + libs for embedding (libiwasm et al.)
+#
+# `wasi-extensions` is NOT built here yet: its cmake target compiles C sources
+# that include `<wasi/api.h>` from wasi-libc, which requires a wasi-sdk
+# toolchain rather than the native host compiler. Adding that is future work.
 
 on:
   workflow_dispatch:
@@ -147,6 +150,16 @@ jobs:
         run: |
           ./build_llvm.sh
 
+      # Explicitly persist the LLVM build even if a later step (wamrc, etc.)
+      # fails — otherwise a failed run leaves nothing cached and the next run
+      # pays the full 30-min LLVM cost again.
+      - name: save LLVM cache
+        if: always() && steps.llvm_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: wamr/core/deps/llvm
+          key: ${{ steps.llvm_cache.outputs.cache-primary-key }}
+
       - name: build wamrc
         working-directory: wamr/wamr-compiler
         run: |
@@ -166,30 +179,8 @@ jobs:
           rm -rf out
 
       # ------------------------------------------------------------------
-      # wasi-extensions (headers + libs for embedding libiwasm)
-      #
-      # Package the `wamr-wasi-extensions/` install tree as tar.gz. Upstream
-      # ships this as `wamr-wasi-extensions-<ver>.zip`; our aarch64 mirror
-      # uses the same `wasi-extensions-<ver>-<runner>.tar.gz` shape as the
-      # other variants so wrvm's asset matcher covers it uniformly.
+      # wasi-extensions is intentionally skipped — see the header comment.
       # ------------------------------------------------------------------
-      - name: build wasi-extensions
-        working-directory: wamr/wamr-wasi-extensions
-        run: |
-          mkdir -p build && cd build
-          cmake -DCMAKE_INSTALL_PREFIX=../install ..
-          cmake --build . -j $(${{ matrix.cores }})
-          cmake --install .
-
-      - name: package wasi-extensions
-        run: |
-          ver=${{ inputs.wamr_version }}
-          name=wasi-extensions-${ver}-${{ matrix.os_token }}
-          mkdir -p out/${name}
-          cp -R wamr/wamr-wasi-extensions/install/. out/${name}/
-          cp wamr/LICENSE out/${name}/LICENSE || true
-          tar -C out -czf ${name}.tar.gz ${name}
-          rm -rf out
 
       # ------------------------------------------------------------------
       # Checksums + upload
@@ -230,8 +221,9 @@ jobs:
             upstream publishes x86_64 assets only.
 
             Built variants: `iwasm` (plain), `iwasm-gc-eh` (GC + Exception
-            Handling), `wamrc` (AOT compiler), `wasi-extensions` (headers +
-            libs for embedding).
+            Handling), `wamrc` (AOT compiler). `wasi-extensions` is not
+            mirrored yet — its cmake target needs a wasi-sdk toolchain rather
+            than a native compiler; that's tracked as follow-up work.
 
             wrvm resolves these automatically on aarch64 hosts; each asset
             ships with a `.sha256` sidecar that wrvm verifies on install.
