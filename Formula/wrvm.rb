@@ -26,7 +26,12 @@ class Wrvm < Formula
   end
 
   def install
-    bin.install Dir.glob("wrvm-*").first => "wrvm"
+    # GitHub release assets are downloaded as raw files (not tarballs), so
+    # they arrive without the executable bit. Restore it before install so
+    # `generate_completions_from_executable` can actually invoke the binary.
+    src = Dir.glob("wrvm-*").first
+    File.chmod(0755, src)
+    bin.install src => "wrvm"
     generate_completions_from_executable(bin/"wrvm", "completions")
   end
 
@@ -36,9 +41,9 @@ class Wrvm < Formula
           wrvm shell-init >> ~/.zshrc     # or your shell's rc
       Then restart your shell.
 
-      NOTE: WAMR upstream publishes x86_64 binaries only. On aarch64
-      (Apple Silicon, ARM Linux), `wrvm install` will refuse with a pointer
-      at the upstream gap; wrvm itself installs regardless.
+      NOTE: WAMR upstream publishes x86_64 binaries only. On aarch64 hosts
+      (Apple Silicon, ARM Linux), `wrvm install` resolves runtime downloads
+      from an in-repo mirror channel — see the README for details.
     EOS
   end
 
