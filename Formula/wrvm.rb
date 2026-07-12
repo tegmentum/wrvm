@@ -7,10 +7,11 @@ class Wrvm < Formula
   # Fill in per-platform sha256 values from the published release assets.
   on_macos do
     if Hardware::CPU.intel?
-      url "https://github.com/tegmentum/wrvm/releases/download/v#{version}/wrvm-x86_64-macos"
-      sha256 "FILL_IN_SHA256_MACOS_X86_64"
+      # v0.1.0 doesn't ship an Intel macOS binary because GitHub Actions
+      # macos-13 (Intel) runners are backlogged for hours. Build from source:
+      #   git clone https://github.com/tegmentum/wrvm && cd wrvm && cargo build --release
+      odie "wrvm v#{version} has no prebuilt Intel macOS binary yet — build from source with `cargo build --release`, or install via `curl | sh` which falls back to `cargo build`."
     else
-      # WAMR upstream ships x86_64 binaries only; wrvm itself is still available.
       url "https://github.com/tegmentum/wrvm/releases/download/v#{version}/wrvm-aarch64-macos"
       sha256 "FILL_IN_SHA256_MACOS_AARCH64"
     end

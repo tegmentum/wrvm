@@ -15,6 +15,12 @@
   directly into `runtimes/wamr/versions/<v>/<variant>/`.
 - `install.sh` + Homebrew formula stub + GitHub Actions CI/release workflows.
 
+### Not shipped as a prebuilt binary in v0.1.0
+- **Intel macOS (x86_64-apple-darwin)**: GitHub Actions `macos-13` runners are
+  consistently backlogged. Intel macOS users install via source
+  (`cargo build --release`). Re-enable in a follow-up release when queue
+  availability recovers.
+
 ### aarch64 support via mirror channel
 - WAMR upstream ships x86_64 assets only. wrvm bridges this by publishing an
   in-repo mirror release (tag `wamr-mirror-<ver>`) built from upstream source
