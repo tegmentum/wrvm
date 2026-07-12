@@ -121,3 +121,101 @@ pub fn recent(entries: &[UsageEntry], limit: usize) -> Vec<UsageEntry> {
     ordered.truncate(limit);
     ordered
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn layout_in(dir: &tempfile::TempDir) -> Layout {
+        Layout {
+            root: dir.path().to_path_buf(),
+        }
+    }
+
+    fn entry(version: &str, invoked_at: i64) -> UsageEntry {
+        UsageEntry {
+            version: version.to_string(),
+            variant: None,
+            runtime_path: None,
+            app: None,
+            caller: None,
+            cwd: None,
+            args: vec![],
+            module: None,
+            module_path: None,
+            module_sha256: None,
+            manifest: None,
+            invoked_at,
+        }
+    }
+
+    #[test]
+    fn read_missing_returns_empty() {
+        let tmp = tempdir().unwrap();
+        let layout = layout_in(&tmp);
+        assert!(read(&layout).unwrap().is_empty());
+    }
+
+    #[test]
+    fn record_then_read_round_trips() {
+        let tmp = tempdir().unwrap();
+        let layout = layout_in(&tmp);
+        record(&layout, &entry("2.4.5", 100)).unwrap();
+        record(&layout, &entry("2.4.4", 200)).unwrap();
+        let got = read(&layout).unwrap();
+        assert_eq!(got.len(), 2);
+        assert_eq!(got[0].version, "2.4.5");
+        assert_eq!(got[1].invoked_at, 200);
+    }
+
+    #[test]
+    fn by_version_rolls_up() {
+        let entries = vec![
+            entry("2.4.5", 100),
+            entry("2.4.5", 300),
+            entry("2.4.4", 200),
+        ];
+        let rollup = by_version(&entries);
+        assert_eq!(rollup.len(), 2);
+        // Sorted by last_used descending.
+        assert_eq!(rollup[0].version, "2.4.5");
+        assert_eq!(rollup[0].count, 2);
+        assert_eq!(rollup[0].last_used, 300);
+        assert_eq!(rollup[1].version, "2.4.4");
+        assert_eq!(rollup[1].count, 1);
+    }
+
+    #[test]
+    fn recent_returns_newest_first_capped() {
+        let entries = vec![
+            entry("a", 100),
+            entry("b", 300),
+            entry("c", 200),
+            entry("d", 400),
+        ];
+        let got = recent(&entries, 2);
+        assert_eq!(got.len(), 2);
+        assert_eq!(got[0].version, "d");
+        assert_eq!(got[1].version, "b");
+    }
+
+    #[test]
+    fn read_compacts_when_over_cap() {
+        let tmp = tempdir().unwrap();
+        let layout = layout_in(&tmp);
+        // Write CAP + 5 entries with monotonic invoked_at.
+        for i in 0..(CAP + 5) {
+            record(&layout, &entry("2.4.5", i as i64)).unwrap();
+        }
+        let got = read(&layout).unwrap();
+        assert_eq!(got.len(), CAP);
+        // The oldest 5 should have been dropped; last entry should be
+        // invoked_at = CAP + 4.
+        assert_eq!(got.first().unwrap().invoked_at, 5);
+        assert_eq!(got.last().unwrap().invoked_at, (CAP + 4) as i64);
+        // File should now be exactly CAP lines.
+        let text = std::fs::read_to_string(layout.usage_log()).unwrap();
+        assert_eq!(text.lines().count(), CAP);
+    }
+}

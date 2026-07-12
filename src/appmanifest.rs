@@ -67,3 +67,88 @@ impl AppManifest {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_with_runtimes() {
+        let m = AppManifest::parse(
+            r#"
+            [app]
+            name = "foo"
+            runtimes = ["2.4.5", "v2.4.4", "WAMR-2.3.0"]
+            "#,
+        )
+        .unwrap();
+        assert_eq!(m.name, "foo");
+        // normalize_version strips both `v` and `WAMR-`.
+        assert_eq!(
+            m.runtimes,
+            vec![
+                "2.4.5".to_string(),
+                "2.4.4".to_string(),
+                "2.3.0".to_string(),
+            ]
+        );
+        assert!(m.variant.is_none());
+    }
+
+    #[test]
+    fn parse_with_variant() {
+        let m = AppManifest::parse(
+            r#"
+            [app]
+            name = "foo"
+            runtimes = ["2.4.5"]
+            variant = "iwasm-gc-eh"
+            "#,
+        )
+        .unwrap();
+        assert_eq!(m.variant.as_deref(), Some("iwasm-gc-eh"));
+    }
+
+    #[test]
+    fn parse_with_runtime_path() {
+        let m = AppManifest::parse(
+            r#"
+            [app]
+            name = "foo"
+            runtime-path = "/opt/foo/bin/iwasm"
+            "#,
+        )
+        .unwrap();
+        assert_eq!(m.runtime_path.as_deref(), Some("/opt/foo/bin/iwasm"));
+        assert!(m.runtimes.is_empty());
+    }
+
+    #[test]
+    fn parse_rejects_no_runtimes_or_path() {
+        let e = AppManifest::parse(
+            r#"
+            [app]
+            name = "foo"
+            "#,
+        );
+        assert!(e.is_err());
+    }
+
+    #[test]
+    fn parse_rejects_empty_name() {
+        let e = AppManifest::parse(
+            r#"
+            [app]
+            name = "  "
+            runtimes = ["2.4.5"]
+            "#,
+        );
+        assert!(e.is_err());
+    }
+
+    #[test]
+    fn parse_rejects_no_app_section() {
+        let e = AppManifest::parse("[wrvm]\nruntime = \"2.4.5\"\n");
+        assert!(e.is_err());
+    }
+}

@@ -71,3 +71,76 @@ impl Platform {
             .any(|p| rest.contains(p) || rest == p.trim_end_matches('-'))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn macos_aarch64() -> Platform {
+        Platform {
+            arch: "aarch64",
+            os: "macos",
+            asset_os_patterns: &["macos-", "darwin"],
+            ext: "tar.gz",
+            needs_mirror: true,
+        }
+    }
+
+    fn linux_x86_64() -> Platform {
+        Platform {
+            arch: "x86_64",
+            os: "linux",
+            asset_os_patterns: &["ubuntu-", "linux"],
+            ext: "tar.gz",
+            needs_mirror: false,
+        }
+    }
+
+    #[test]
+    fn matches_asset_happy_path_macos_runner() {
+        let p = macos_aarch64();
+        assert!(p.matches_asset("iwasm-2.4.5-aarch64-macos-14.tar.gz", "iwasm", "2.4.5"));
+    }
+
+    #[test]
+    fn matches_asset_darwin_alt_token() {
+        let p = macos_aarch64();
+        assert!(p.matches_asset("iwasm-2.4.5-aarch64-darwin.tar.gz", "iwasm", "2.4.5"));
+    }
+
+    #[test]
+    fn matches_asset_linux_runner() {
+        let p = linux_x86_64();
+        assert!(p.matches_asset("iwasm-2.4.5-x86_64-ubuntu-22.04.tar.gz", "iwasm", "2.4.5"));
+    }
+
+    #[test]
+    fn matches_asset_rejects_wrong_variant() {
+        let p = macos_aarch64();
+        assert!(!p.matches_asset("wamrc-2.4.5-aarch64-macos-14.tar.gz", "iwasm", "2.4.5"));
+    }
+
+    #[test]
+    fn matches_asset_rejects_wrong_version() {
+        let p = macos_aarch64();
+        assert!(!p.matches_asset("iwasm-2.4.4-aarch64-macos-14.tar.gz", "iwasm", "2.4.5"));
+    }
+
+    #[test]
+    fn matches_asset_rejects_wrong_arch() {
+        let p = macos_aarch64();
+        assert!(!p.matches_asset("iwasm-2.4.5-x86_64-macos-14.tar.gz", "iwasm", "2.4.5"));
+    }
+
+    #[test]
+    fn matches_asset_rejects_wrong_ext() {
+        let p = macos_aarch64();
+        assert!(!p.matches_asset("iwasm-2.4.5-aarch64-macos-14.zip", "iwasm", "2.4.5"));
+    }
+
+    #[test]
+    fn label_formats() {
+        assert_eq!(macos_aarch64().label(), "macos-aarch64");
+        assert_eq!(linux_x86_64().label(), "linux-x86_64");
+    }
+}

@@ -105,3 +105,91 @@ fn route(path: &str) -> String {
     }
     path.to_string()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use flate2::write::GzEncoder;
+    use flate2::Compression;
+    use std::io::Write;
+    use tempfile::tempdir;
+
+    /// Build an in-memory .tar.gz at `dest` from `(path, mode, bytes)` tuples.
+    fn build_tar_gz(dest: &Path, entries: &[(&str, u32, &[u8])]) {
+        let tar_bytes: Vec<u8> = {
+            let mut builder = tar::Builder::new(Vec::new());
+            for (path, mode, bytes) in entries {
+                let mut header = tar::Header::new_gnu();
+                header.set_size(bytes.len() as u64);
+                header.set_mode(*mode);
+                header.set_cksum();
+                builder.append_data(&mut header, path, *bytes).unwrap();
+            }
+            builder.into_inner().unwrap()
+        };
+        let file = std::fs::File::create(dest).unwrap();
+        let mut enc = GzEncoder::new(file, Compression::default());
+        enc.write_all(&tar_bytes).unwrap();
+        enc.finish().unwrap();
+    }
+
+    #[test]
+    fn extract_strips_single_top_level_dir() {
+        let tmp = tempdir().unwrap();
+        let path = tmp.path().join("t.tar.gz");
+        build_tar_gz(
+            &path,
+            &[
+                ("iwasm-2.4.5-x86_64-linux/bin/iwasm", 0o755, b"exe-bytes"),
+                ("iwasm-2.4.5-x86_64-linux/LICENSE", 0o644, b"license"),
+            ],
+        );
+        let files = extract_tar_gz(&path).unwrap();
+        let paths: Vec<_> = files.iter().map(|f| f.logical_path.as_str()).collect();
+        assert!(paths.contains(&"bin/iwasm"));
+        assert!(paths.contains(&"LICENSE"));
+        for f in &files {
+            if f.logical_path == "bin/iwasm" {
+                assert_eq!(f.mode & 0o777, 0o755);
+                assert_eq!(f.data, b"exe-bytes");
+            }
+        }
+    }
+
+    #[test]
+    fn extract_routes_bare_iwasm_to_bin() {
+        let tmp = tempdir().unwrap();
+        let path = tmp.path().join("t.tar.gz");
+        // No common top-level directory; `iwasm` sits at the archive root.
+        build_tar_gz(
+            &path,
+            &[("iwasm", 0o755, b"exe-bytes"), ("LICENSE", 0o644, b"lic")],
+        );
+        let files = extract_tar_gz(&path).unwrap();
+        let paths: Vec<_> = files.iter().map(|f| f.logical_path.as_str()).collect();
+        assert!(paths.contains(&"bin/iwasm"));
+        assert!(paths.contains(&"LICENSE"));
+    }
+
+    #[test]
+    fn extract_leaves_non_executables_alone() {
+        let tmp = tempdir().unwrap();
+        let path = tmp.path().join("t.tar.gz");
+        // Not a recognized executable name — should stay at the root.
+        build_tar_gz(
+            &path,
+            &[("README.md", 0o644, b"hello"), ("iwasm", 0o755, b"e")],
+        );
+        let files = extract_tar_gz(&path).unwrap();
+        let paths: Vec<_> = files.iter().map(|f| f.logical_path.as_str()).collect();
+        assert!(paths.contains(&"README.md"));
+        assert!(paths.contains(&"bin/iwasm"));
+    }
+
+    #[test]
+    fn route_preserves_nested_paths() {
+        // Nested paths carry a slash and are never rewritten, even for iwasm.
+        assert_eq!(route("share/wamr/iwasm"), "share/wamr/iwasm");
+        assert_eq!(route("include/wasi/api.h"), "include/wasi/api.h");
+    }
+}

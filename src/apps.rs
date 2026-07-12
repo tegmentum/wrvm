@@ -92,3 +92,103 @@ pub fn apps_using(layout: &Layout, version: &str) -> Result<Vec<String>> {
     names.sort();
     Ok(names)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn layout_in(dir: &tempfile::TempDir) -> Layout {
+        Layout {
+            root: dir.path().to_path_buf(),
+        }
+    }
+
+    #[test]
+    fn read_missing_file_returns_empty() {
+        let tmp = tempdir().unwrap();
+        let layout = layout_in(&tmp);
+        assert!(read(&layout).unwrap().is_empty());
+    }
+
+    #[test]
+    fn register_then_read_round_trips() {
+        let tmp = tempdir().unwrap();
+        let layout = layout_in(&tmp);
+        register(
+            &layout,
+            "foo",
+            Some("/tmp/foo"),
+            Some("iwasm"),
+            None,
+            &["2.4.5".to_string()],
+            100,
+        )
+        .unwrap();
+        let apps = read(&layout).unwrap();
+        assert_eq!(apps.len(), 1);
+        assert_eq!(apps[0].name, "foo");
+        assert_eq!(apps[0].variant.as_deref(), Some("iwasm"));
+        assert_eq!(apps[0].runtimes, vec!["2.4.5".to_string()]);
+        assert_eq!(apps[0].registered_at, 100);
+    }
+
+    #[test]
+    fn register_replaces_same_name() {
+        let tmp = tempdir().unwrap();
+        let layout = layout_in(&tmp);
+        register(
+            &layout,
+            "foo",
+            None,
+            None,
+            None,
+            &["2.4.5".to_string()],
+            100,
+        )
+        .unwrap();
+        register(
+            &layout,
+            "foo",
+            None,
+            None,
+            None,
+            &["2.4.4".to_string()],
+            200,
+        )
+        .unwrap();
+        let apps = read(&layout).unwrap();
+        assert_eq!(apps.len(), 1);
+        assert_eq!(apps[0].runtimes, vec!["2.4.4".to_string()]);
+        assert_eq!(apps[0].registered_at, 200);
+    }
+
+    #[test]
+    fn unregister_returns_true_when_present() {
+        let tmp = tempdir().unwrap();
+        let layout = layout_in(&tmp);
+        register(&layout, "foo", None, None, None, &["2.4.5".to_string()], 0).unwrap();
+        assert!(unregister(&layout, "foo").unwrap());
+        assert!(!unregister(&layout, "foo").unwrap());
+    }
+
+    #[test]
+    fn apps_using_filters_by_runtime() {
+        let tmp = tempdir().unwrap();
+        let layout = layout_in(&tmp);
+        register(&layout, "foo", None, None, None, &["2.4.5".to_string()], 0).unwrap();
+        register(
+            &layout,
+            "bar",
+            None,
+            None,
+            None,
+            &["2.4.4".to_string(), "2.4.5".to_string()],
+            0,
+        )
+        .unwrap();
+        register(&layout, "baz", None, None, None, &["2.4.4".to_string()], 0).unwrap();
+        let using = apps_using(&layout, "2.4.5").unwrap();
+        assert_eq!(using, vec!["bar".to_string(), "foo".to_string()]);
+    }
+}

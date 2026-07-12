@@ -303,3 +303,107 @@ fn which(name: &str) -> Option<PathBuf> {
     }
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn layout_in(dir: &tempfile::TempDir) -> Layout {
+        Layout {
+            root: dir.path().to_path_buf(),
+        }
+    }
+
+    fn touch_manifest(layout: &Layout, version: &str, variant: &str) {
+        let mfile = layout.manifest_file(WAMR, version, variant);
+        std::fs::create_dir_all(mfile.parent().unwrap()).unwrap();
+        std::fs::write(&mfile, "{}").unwrap();
+    }
+
+    #[test]
+    fn installed_versions_empty_when_none_present() {
+        let tmp = tempdir().unwrap();
+        let layout = layout_in(&tmp);
+        assert!(installed_versions(&layout).unwrap().is_empty());
+    }
+
+    #[test]
+    fn installed_versions_sees_variants() {
+        let tmp = tempdir().unwrap();
+        let layout = layout_in(&tmp);
+        touch_manifest(&layout, "2.4.5", "iwasm");
+        touch_manifest(&layout, "2.4.4", "iwasm");
+        // Directory without a manifest doesn't count.
+        std::fs::create_dir_all(layout.version_dir(WAMR, "1.0.0").join("iwasm")).unwrap();
+        let versions = installed_versions(&layout).unwrap();
+        // Sorted ascending.
+        assert_eq!(versions, vec!["2.4.4".to_string(), "2.4.5".to_string()]);
+    }
+
+    #[test]
+    fn installed_variants_lists_all() {
+        let tmp = tempdir().unwrap();
+        let layout = layout_in(&tmp);
+        touch_manifest(&layout, "2.4.5", "iwasm");
+        touch_manifest(&layout, "2.4.5", "iwasm-gc-eh");
+        touch_manifest(&layout, "2.4.5", "wamrc");
+        let variants = installed_variants(&layout, "2.4.5").unwrap();
+        assert_eq!(
+            variants,
+            vec![
+                "iwasm".to_string(),
+                "iwasm-gc-eh".to_string(),
+                "wamrc".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn find_pin_walks_upward() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+        std::fs::write(
+            root.join("wrvm.toml"),
+            "[wrvm]\nruntime = \"2.4.5\"\nvariant = \"iwasm-gc-eh\"\n",
+        )
+        .unwrap();
+        let nested = root.join("a").join("b").join("c");
+        std::fs::create_dir_all(&nested).unwrap();
+        let (spec, variant, file) = find_pin(&nested).unwrap().unwrap();
+        assert_eq!(spec, "2.4.5");
+        assert_eq!(variant.as_deref(), Some("iwasm-gc-eh"));
+        assert_eq!(file, root.join("wrvm.toml"));
+    }
+
+    #[test]
+    fn find_pin_returns_none_when_absent() {
+        let tmp = tempdir().unwrap();
+        assert!(find_pin(tmp.path()).unwrap().is_none());
+    }
+
+    #[test]
+    fn default_version_round_trips() {
+        let tmp = tempdir().unwrap();
+        let layout = layout_in(&tmp);
+        assert!(default_version(&layout).is_none());
+        set_default_version(&layout, "2").unwrap();
+        assert_eq!(default_version(&layout).as_deref(), Some("2"));
+    }
+
+    #[test]
+    fn resolve_installed_matches_floating_spec() {
+        let tmp = tempdir().unwrap();
+        let layout = layout_in(&tmp);
+        touch_manifest(&layout, "2.4.5", "iwasm");
+        touch_manifest(&layout, "2.4.4", "iwasm");
+        touch_manifest(&layout, "2.3.0", "iwasm");
+        assert_eq!(resolve_installed(&layout, "2").as_deref(), Some("2.4.5"));
+        assert_eq!(resolve_installed(&layout, "2.4").as_deref(), Some("2.4.5"));
+        assert_eq!(
+            resolve_installed(&layout, "2.3.0").as_deref(),
+            Some("2.3.0")
+        );
+        assert!(resolve_installed(&layout, "3").is_none());
+    }
+}
