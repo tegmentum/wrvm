@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.4 — 2026-07-12
+
 ### Added
 - **Windows (x86_64) prebuilt binary** (`wrvm-x86_64-windows.exe`).
   Release matrix builds it on `windows-latest` with a PowerShell
@@ -30,6 +32,30 @@
   (or `brew update && brew upgrade wrvm` if the formula index is stale).
   The background "newer version available" notifier is also suppressed
   in this case, since the advertised command wouldn't work.
+- `shim::exec_or_run` on non-unix platforms was missing the
+  `anyhow::Context` import — a latent bug that only compiled through on
+  Windows once CI actually built `windows-latest`. Fixed.
+
+### Changed
+- Test coverage grew from 5 (spec parsing only) to 49 by covering the
+  file-touching modules directly.
+- Homebrew formula now `chmod +x`'s the release asset before
+  `bin.install` so the completion-generation step can execute the
+  freshly installed binary.
+
+### Infrastructure
+- `mirror-wamr-sync.yml` scheduled workflow (Mon+Thu 06:00 UTC + manual
+  dispatch) auto-mirrors new upstream WAMR releases: lists
+  `bytecodealliance/wasm-micro-runtime` tags, filters to real
+  `MAJOR.MINOR.PATCH` shape, and dispatches `mirror-wamr.yml` for any
+  version missing a `wamr-mirror-<ver>` release on this repo.
+  Rate-limited to 3/run, oldest-first.
+- `release.yml` gains an `update-formula` job that auto-patches
+  `Formula/wrvm.rb` with real `.sha256` values after each release
+  (replaces the manual sed dance done at each of v0.1.0–v0.1.3).
+- `ci.yml` runs a smoke test on the built binary (`--version`,
+  `--help`, `completions`, `doctor`) so runtime regressions surface
+  before they ship.
 
 ## 0.1.3 — 2026-07-12
 
